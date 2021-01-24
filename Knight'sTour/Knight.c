@@ -32,22 +32,21 @@ typedef struct node
 	struct node** nodes;
 } s_node, * Node;
 
-void delay(int number_of_seconds);
-int tour(Node* checkerboard, Node currentNode);
-int isNear(Node origin, Node wanted);
-int posibleMovements(Node node, Node toExcluse);
-void nodesLinker(Node* nodes);
-void printSolutionwTittle(Node* checkerboard, char* tittle, int type);
-void printAllNode(Node node);
-void printAllBox(Box box);
+typedef enum results {OK, NOCIRCUIT, NULLMEMORY,  ALRADYNULL, NORESIZE} coderes;
+typedef enum status {NO, YES} bool;
 
 int initBox(Box* box);
-int setContent(Box box, int data);
 int destroyBox(Box box);
 int initNode(Node* node);
 int destroyNode(Node node);
 int linkNode(Node node, Node nodeToLink);
 int getNodeLinked(Node* nodeWanted, Node node, int idx);
+void nodesLinker(Node* nodes);
+void printSolutionwTittle(Node* checkerboard, char* tittle, int type);
+int posibleMovements(Node node, Node toExcluse);
+int isNear(Node origin, Node wanted);
+int isCircuit(Node* checkerboard);
+int movement(Node* checkerboard, Node currentNode, Node *start);
 
 int main()
 {
@@ -60,10 +59,17 @@ int main()
 		printf("Enter board size: ");
 		scanf("%i", &N);
 
-		if (N < 5)
-			printf("%sMinimum checker board size is 5 %s\n", ERR_T, RST_T);
-		else if (N > 8)
-			printf("%sMaximum checker size is 8 for this PC Health	%s\n", ERR_T, RST_T);
+		if (N < 5 || N % 2)
+			printf("%sJust even numbers over 5 %s\n", ERR_T, RST_T);
+		else if (N > 16)
+			/* Can solve for bigger checkerboards, but take a loooong time if u don't select specific boxs
+			*	size 22 box (7 8)
+			*	size 24 box (7 8)
+			*	size 26 box (7 8)
+			*	!NO WORKS size 28 box (7 8)
+			*	No tried with other options
+			*/
+			printf("%sMaximum checker size is 16 for this PC Health	%s\n", ERR_T, RST_T);
 		else
 			break;
 	}
@@ -78,21 +84,15 @@ int main()
 		else
 			break;
 	}
-	//printf("(%d, %d) \n", startPos->x, startPos->y);
 
-	int **sol = (int**) calloc(N, sizeof(int*));
-
-	for (int i = 0; i < N; i++)
-	{
-		*(sol+i) = (int*) calloc(N, sizeof(int));
-	}
 	checkerboard = (Node*)calloc(N * N, sizeof(Node));
 
 	for (int i = 0, j = 0; i < N && j < N; i++)
 	{
-		initNode(checkerboard + i + (N * j));
-		(*(checkerboard + i + (N * j)))->box->x = i;
-		(*(checkerboard + i + (N * j)))->box->y = j;
+		Node* currentNode = checkerboard+i+(N*j);
+		initNode(currentNode);
+		(*currentNode)->box->x = i;
+		(*currentNode)->box->y = j;
 
 		if (i + 1 == N)
 		{
@@ -101,15 +101,15 @@ int main()
 		}
 	}
 
-	printSolutionwTittle(checkerboard, "Initation", 1);
+	//printSolutionwTittle(checkerboard, "Initation", 1);
+	nodesLinker(checkerboard);
 
-	nodesLinker(checkerboard, N, N);
-
-	(*checkerboard + startPos->x + (N * startPos->y))->box->content = 0;
-	if (tour(checkerboard, (*checkerboard + startPos->x + (N * startPos->y))))
-		printf("Solution does not exist");
+	Node* nextNode = checkerboard+startPos->x+(N*startPos->y);
+	(*nextNode)->box->content = 0;
+	if (movement(checkerboard, (*nextNode), nextNode))
+		printSolutionwTittle(checkerboard, "Result", N*N);
 	else
-		printSolutionwTittle(checkerboard, "Result", 24);
+		printf("Solution does not exist");
 
 	return 0;
 }
@@ -123,16 +123,6 @@ int initBox(Box* box)
 	(*box)->content = -1;
 	(*box)->x = -1;
 	(*box)->y = -1;
-
-	return 0;
-}
-
-int setContent(Box box, int data)
-{
-	if (!box)
-		return 1;
-
-	box->content = data;
 
 	return 0;
 }
@@ -176,32 +166,26 @@ int destroyNode(Node node)
 	return 0;
 }
 
+int linkNode(Node node, Node nodeToLink)
+{
+	if (!node || !nodeToLink)
+		return 2;
+
+	node->nodes = (Node*) realloc(node->nodes, (node->sNodes+1)*sizeof(Node));
+	if (!node->nodes)
+		return 1;
+	*(node->nodes + node->sNodes) = nodeToLink;
+	node->sNodes++;
+
+	return 0;
+}
+
 int getNodeLinked(Node* nodeWanted, Node node, int idx)
 {
 	if (!node)
 		return 1;
 
 	*nodeWanted = *(node->nodes + idx);
-
-	return 0;
-}
-
-int linkNode(Node node, Node nodeToLink)
-{
-	if (node==NULL)
-		return 2;
-	if (nodeToLink == NULL)
-		return 3;
-
-
-	node->nodes = (Node*) realloc(node->nodes, (node->sNodes+1)*sizeof(Node));
-	if (!node->nodes)
-	{
-		//printf("%c%d !<- %c%d", node->box->x + 'A', node->box->y, nodeToLink->box->x + 'A', nodeToLink->box->y);
-		return 1;
-	}
-	*(node->nodes + node->sNodes) = nodeToLink;
-	node->sNodes++;
 
 	return 0;
 }
@@ -243,76 +227,6 @@ void nodesLinker(Node* nodes)
 	printSolutionwTittle(nodes, "Movements", 0);
 }
 
-int posibleMovements(Node node, Node toExcluse)
-{
-	int counter = 0;
-	for (int i = 0; i < node->sNodes; i++)
-	{
-		Node curNode = *(node->nodes + i);
-		if (curNode != toExcluse && curNode->box->content == -1)
-			counter++;
-	}
-	return counter;
-}
-
-int isNear(Node origin, Node wanted)
-{
-
-	return 0;
-}
-
-int tour(Node* checkerboard, Node currentNode)
-{
-	/*if (currentNode->box->content+1 == N * N)
-		return 1;
-	/*	 PARA IMPRIMIR EL PRCESO DEL PROGRAMA
-	system("cls");
-	delay(0.5);
-	printSolutionwTittle(checkerboard, "Steps", currentNode->box->content);
-	*/
-	int idxSmallest = -1;
-	for (int i = 0, aux = 0, smallestMovements = 8; i < currentNode->sNodes; i++)	// Recorrido de todos los nodos vincuados
-		if ((*(currentNode->nodes + i))->box->content < 0)		// Verificación que no es un numero ya utilizado
-		{
-			aux = posibleMovements(*(currentNode->nodes + i), currentNode);
-			if (smallestMovements > aux)	// Si el numero de movimientos es menor, se elige
-			{
-				smallestMovements = aux;
-				idxSmallest = i;	// Seleccion del indice
-				//printf("smallest movements: %d on %d \n", smallestMovements, idxSmallest);
-			}
-		}
-	if (idxSmallest < 0)
-		return 0;
-
-	Node nextNode = NULL;
-	getNodeLinked(&nextNode, currentNode, idxSmallest);
-	nextNode->box->content = currentNode->box->content + 1;
-
-	int catcher = tour(checkerboard, nextNode);
-	if (catcher == 2)
-	{
-		printf("%sError No INDEX FOUNDED on tour, lvl %d %s", ERR_T, currentNode->box->content, RST_T);
-		return 2;
-	}
-	/*	Basic backtraking
-	for (int i = 0; i < currentNode->sNodes; i++)
-	{
-		Node nextNode = NULL;
-		getNodeLinked(&nextNode, currentNode, i);
-		if (nextNode->box->content < 0)
-		{
-			nextNode->box->content = currentNode->box->content + 1;
-			if (tour(checkerboard, nextNode))
-				return 1;
-			else
-				nextNode->box->content *= -1;
-		}
-	}
-	*/
-	return 0;
-}
-
 void printSolutionwTittle(Node* checkerboard, char* tittle, int type)
 {
 	printf("\n\t\t%s\n", tittle);
@@ -323,13 +237,12 @@ void printSolutionwTittle(Node* checkerboard, char* tittle, int type)
 	for (int i = 0; i < N*5+1; i++)
 		printf("-");
 	printf("\n");
-	//printf("movements %d \n", (*(checkerboard))->sNodes);
 	for (int i = 0, j = 0; i < N && j < N; i++)
 	{
-		Node currentNode = *(checkerboard + i + (N * j));
-		if (i == 0)
+		Node currentNode = *(checkerboard+i+(N*j));
+		if (!i)
 			printf("%2d | ", j);
-		if (type == 0)
+		if (!type)
 			printf(" %3d ", currentNode->sNodes);
 		else
 		{
@@ -350,27 +263,99 @@ void printSolutionwTittle(Node* checkerboard, char* tittle, int type)
 	}
 }
 
-void delay(int number_of_seconds)
+int posibleMovements(Node node, Node toExcluse)
 {
-	// Converting time into milli_seconds 
-	int milli_seconds = 1000 * number_of_seconds;
-
-	// Storing start time 
-	clock_t start_time = clock();
-
-	// looping till required time is not achieved 
-	while (clock() < start_time + milli_seconds);
+	int counter = 0;
+	for (int i = 0; i < node->sNodes; i++)
+	{
+		Node curNode = *(node->nodes + i);
+		if (curNode != toExcluse && curNode->box->content == -1)
+			counter++;
+	}
+	return counter;
 }
 
-void printAllNode(Node node)
+int isNear(Node origin, Node wanted)
 {
-	printf("%p::%d ", node, node->sNodes);
-	printAllBox(node->box);
-	printf("\n");
+	int near = 0;
+	for (int i = 0; i < origin->sNodes; i++)
+		if (wanted == *(origin->nodes + i))
+		{
+			near = 1;
+			break;
+		}
+	return near;
 }
 
-void printAllBox(Box box)
+int isCircuit(Node *checkerboard)
 {
-	printf("[%c%d]%d ", box->x + 'A', box->y, box->content);
+	int notCircuit = 0;
+	for (int i = 0; i < N*N; i++)
+		if ((*(checkerboard + i))->box->content < 0)
+		{
+			notCircuit = NOCIRCUIT;
+			break;
+		}
+
+	return !notCircuit;
 }
 
+int movement(Node* checkerboard, Node currentNode, Node* start)
+{
+	int sizeSmallers = 0, idxSmallers[8] = { -1, -1, -1, -1, -1, -1, -1, -1 };
+	for (int i = 0, aux = 0, smallestMovements = 8; i < currentNode->sNodes; i++)	// Recorrido de todos los nodos vincuados
+	{
+		//printf("number nodes %d \n", currentNode->sNodes);
+		if ((currentNode->nodes[i])->box->content < 0)		// Verificación que no es un numero ya utilizado
+		{
+			aux = posibleMovements(*(currentNode->nodes + i), currentNode);
+			if (smallestMovements > aux)	// Si el numero de movimientos es menor, se elige
+			{
+				smallestMovements = aux;
+				*idxSmallers = i;	// Seleccion del indice
+				for (int j=1; j<sizeSmallers; j++)	// Limpieza de indice
+					*(idxSmallers+j) = 0;
+				sizeSmallers = 1;
+			}
+			else if (smallestMovements == aux)	// Si hay repetido
+			{
+				*(idxSmallers+sizeSmallers) = i;
+				sizeSmallers++;
+			}
+		}
+	}
+
+	if (sizeSmallers <= 0)	// No hay nodos disponibles a saltos
+	{
+
+		if (isCircuit(checkerboard))// Ya todas las casillas fueron recorridas?
+			/*	 PARA IMPRIMIR EL PRCESO DEL PROGRAMA con rutas completas
+			//system("cls");
+			delay(1);
+			printSolutionwTittle(checkerboard, "Steps", currentNode->box->content);
+			*/
+			//printf(".");
+			if (isNear(currentNode, *start))	// Esta cerca la cassilla de comienzo?
+			{
+				(*start)->box->content = currentNode->box->content+1;	// Asignar ultimo valor
+				return 1;	// Fin recursividad
+			}
+		// No esta cerca la casilla de comienzo o no se han recorrido todas las casillas, buscar tro camino
+		return 0;
+	}
+	else	// Hay nodos a saltar
+		for (int i = 0; i < sizeSmallers; i++)	// Probar todas las disponibilidades
+		{
+			Node nextNode = NULL;
+			getNodeLinked(&nextNode, currentNode, *(idxSmallers+i));
+			nextNode->box->content = currentNode->box->content + 1;	// Asignacion del movimiento posterior
+
+			if (movement(checkerboard, nextNode, start))	// Si es valido, se realizo un ciclo
+				return 1;	// Se comunica el resultado
+			else
+				nextNode->box->content *= -1;	// Se cancela el movimiento realizado y se mantiene un registro de los ultimos movimientos pero no es la ruta actual
+		}
+
+	// llegado a este punto no se encontro el resultado
+	return 0;	// Se comunica el error
+}
