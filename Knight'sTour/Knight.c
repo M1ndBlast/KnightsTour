@@ -1,7 +1,7 @@
-/*	Knight's Tour
-		De tal forma que para cualquier casilla arbitraria, recorra todas las demás casillas, y regrese de nuevo a la casilla original,
+ï»¿/*	Knight's Tour
+		De tal forma que para cualquier casilla arbitraria, recorra todas las demï¿½s casillas, y regrese de nuevo a la casilla original,
 		sin pasar 2 veces por una misma casilla en el circuito (exceptuando por la casilla de partida).
-		Pueden resolverlo de forma iterativa ó recursiva y de preferencia usando estructuras de datos
+		Pueden resolverlo de forma iterativa ï¿½ recursiva y de preferencia usando estructuras de datos
 		Reference: https://en.wikipedia.org/wiki/Knight%27s_tour
 
 		By Peduzzi Acevedo Gustavo Alain
@@ -18,11 +18,17 @@
 
 int N = 5;
 
+typedef enum results { OK, NOHAMILTONIAN, HAMILTONIAN, NULLMEMORY, ALRADYNULL, NORESIZE } coderes;
+typedef enum status { NO, YES } bool;
+typedef enum statBox { NOSELECTED, CANDIDATE, SELECTED } statBox;
+
+
 typedef struct box
 {
 	int x;
 	int y;
 	int content;
+	statBox status;
 } s_box, * Box;
 
 typedef struct node
@@ -32,8 +38,6 @@ typedef struct node
 	struct node** nodes;
 } s_node, * Node;
 
-typedef enum results {OK, NOCIRCUIT, NULLMEMORY,  ALRADYNULL, NORESIZE} coderes;
-typedef enum status {NO, YES} bool;
 
 int initBox(Box* box);
 int destroyBox(Box box);
@@ -45,8 +49,8 @@ void nodesLinker(Node* nodes);
 void printSolutionwTittle(Node* checkerboard, char* tittle, int type);
 int posibleMovements(Node node, Node toExcluse);
 int isNear(Node origin, Node wanted);
-int isCircuit(Node* checkerboard);
-int movement(Node* checkerboard, Node currentNode, Node *start);
+int isHamiltonian(Node* checkerboard);
+int movement(Node* checkerboard, Node currentNode, Node* start);
 
 int main()
 {
@@ -62,7 +66,7 @@ int main()
 		if (N < 5 || N % 2)
 			printf("%sJust even numbers over 5 %s\n", ERR_T, RST_T);
 		else if (N > 16)
-			/* Can solve for bigger checkerboards, but take a loooong time if u don't select specific boxs
+			/* Can solve for bigger checkerboards, but take a loooong time if u don't select specific boxes
 			*	size 22 box (7 8)
 			*	size 24 box (7 8)
 			*	size 26 box (7 8)
@@ -89,7 +93,7 @@ int main()
 
 	for (int i = 0, j = 0; i < N && j < N; i++)
 	{
-		Node* currentNode = checkerboard+i+(N*j);
+		Node* currentNode = checkerboard + i + (N * j);
 		initNode(currentNode);
 		(*currentNode)->box->x = i;
 		(*currentNode)->box->y = j;
@@ -104,10 +108,11 @@ int main()
 	//printSolutionwTittle(checkerboard, "Initation", 1);
 	nodesLinker(checkerboard);
 
-	Node* nextNode = checkerboard+startPos->x+(N*startPos->y);
+	Node* nextNode = checkerboard + startPos->x + (N * startPos->y);
 	(*nextNode)->box->content = 0;
+	(*nextNode)->box->status = SELECTED;
 	if (movement(checkerboard, (*nextNode), nextNode))
-		printSolutionwTittle(checkerboard, "Result", N*N);
+		printSolutionwTittle(checkerboard, "Result", N * N);
 	else
 		printf("Solution does not exist");
 
@@ -121,6 +126,7 @@ int initBox(Box* box)
 		return 1;
 
 	(*box)->content = -1;
+	(*box)->status = NOSELECTED;
 	(*box)->x = -1;
 	(*box)->y = -1;
 
@@ -171,7 +177,7 @@ int linkNode(Node node, Node nodeToLink)
 	if (!node || !nodeToLink)
 		return 2;
 
-	node->nodes = (Node*) realloc(node->nodes, (node->sNodes+1)*sizeof(Node));
+	node->nodes = (Node*)realloc(node->nodes, (node->sNodes + 1) * sizeof(Node));
 	if (!node->nodes)
 		return 1;
 	*(node->nodes + node->sNodes) = nodeToLink;
@@ -182,6 +188,7 @@ int linkNode(Node node, Node nodeToLink)
 
 int getNodeLinked(Node* nodeWanted, Node node, int idx)
 {
+	// not defined
 	if (!node)
 		return 1;
 
@@ -192,20 +199,20 @@ int getNodeLinked(Node* nodeWanted, Node node, int idx)
 
 void nodesLinker(Node* nodes)
 {
-	const s_box relativeMovements[8] = {{ 1, -2, 0}, 
+	const s_box relativeMovements[8] = { { 1, -2, 0},
 										{ 2, -1, 0},
-										{ 2,  1, 0}, 
-										{ 1,  2, 0}, 
-										{-1,  2, 0}, 
-										{-2,  1, 0}, 
-										{-2, -1, 0}, 
-										{-1, -2, 0}};
+										{ 2,  1, 0},
+										{ 1,  2, 0},
+										{-1,  2, 0},
+										{-2,  1, 0},
+										{-2, -1, 0},
+										{-1, -2, 0} };
 	Box nextBox = NULL;
 	initBox(&nextBox);
 
 	for (int i = 0, j = 0; i < N && j < N; i++)
 	{
-		Node currentNode = *(nodes+i+(N*j));
+		Node currentNode = *(nodes + i + (N * j));
 
 		for (int k = 0; k < 8; k++)
 		{
@@ -234,12 +241,12 @@ void printSolutionwTittle(Node* checkerboard, char* tittle, int type)
 	for (int i = 'A'; i < 'A' + N; i++)
 		printf(" %3c ", i);
 	printf("\n    ");
-	for (int i = 0; i < N*5+1; i++)
+	for (int i = 0; i < N * 5 + 1; i++)
 		printf("-");
 	printf("\n");
 	for (int i = 0, j = 0; i < N && j < N; i++)
 	{
-		Node currentNode = *(checkerboard+i+(N*j));
+		Node currentNode = *(checkerboard + i + (N * j));
 		if (!i)
 			printf("%2d | ", j);
 		if (!type)
@@ -254,7 +261,7 @@ void printSolutionwTittle(Node* checkerboard, char* tittle, int type)
 				printf(" %3d ", currentNode->box->content);
 		}
 
-		if (i+1==N)
+		if (i + 1 == N)
 		{
 			i = -1;
 			j++;
@@ -269,7 +276,8 @@ int posibleMovements(Node node, Node toExcluse)
 	for (int i = 0; i < node->sNodes; i++)
 	{
 		Node curNode = *(node->nodes + i);
-		if (curNode != toExcluse && curNode->box->content == -1)
+		// here CANDIDATE is discarded for double reviwing
+		if (curNode != toExcluse && curNode->box->status == NOSELECTED)
 			counter++;
 	}
 	return counter;
@@ -277,85 +285,120 @@ int posibleMovements(Node node, Node toExcluse)
 
 int isNear(Node origin, Node wanted)
 {
-	int near = 0;
+	//goes trought whole jumpeable boxes
 	for (int i = 0; i < origin->sNodes; i++)
+		//	are same wanted box and jumpeable box?
 		if (wanted == *(origin->nodes + i))
-		{
-			near = 1;
-			break;
-		}
-	return near;
+			return 1;
+	return 0;
 }
 
-int isCircuit(Node *checkerboard)
+/*
+* returns if it is NOHAMILTONIAN or HAMILTONIAN path
+*/
+int isHamiltonian(Node* checkerboard)
 {
-	int notCircuit = 0;
 	for (int i = 0; i < N*N; i++)
-		if ((*(checkerboard + i))->box->content < 0)
-		{
-			notCircuit = NOCIRCUIT;
-			break;
-		}
-
-	return !notCircuit;
+		if ((*(checkerboard + i))->box->status != SELECTED)
+			return 0;
+	return 1;
 }
 
 int movement(Node* checkerboard, Node currentNode, Node* start)
 {
-	int sizeSmallers = 0, idxSmallers[8] = { -1, -1, -1, -1, -1, -1, -1, -1 };
-	for (int i = 0, aux = 0, smallestMovements = 8; i < currentNode->sNodes; i++)	// Recorrido de todos los nodos vincuados
+	int *idxedSmallest;	// Here got boxes to jump indexes
+	int idxedSmallestSize = indexCandidates(currentNode, &idxedSmallest);
+
+	// If there aren't indexes to jump
+	if (!idxedSmallestSize)
 	{
-		//printf("number nodes %d \n", currentNode->sNodes);
-		if ((currentNode->nodes[i])->box->content < 0)		// Verificación que no es un numero ya utilizado
+		// if the knights toured all boxes
+		if (isHamiltonian(checkerboard))
 		{
-			aux = posibleMovements(*(currentNode->nodes + i), currentNode);
-			if (smallestMovements > aux)	// Si el numero de movimientos es menor, se elige
-			{
-				smallestMovements = aux;
-				*idxSmallers = i;	// Seleccion del indice
-				for (int j=1; j<sizeSmallers; j++)	// Limpieza de indice
-					*(idxSmallers+j) = 0;
-				sizeSmallers = 1;
-			}
-			else if (smallestMovements == aux)	// Si hay repetido
-			{
-				*(idxSmallers+sizeSmallers) = i;
-				sizeSmallers++;
-			}
-		}
-	}
-
-	if (sizeSmallers <= 0)	// No hay nodos disponibles a saltos
-	{
-
-		if (isCircuit(checkerboard))// Ya todas las casillas fueron recorridas?
-			/*	 PARA IMPRIMIR EL PRCESO DEL PROGRAMA con rutas completas
-			//system("cls");
+				/*	 TO PRINT ALL HAMILTONIAN PATHS
+			system("cls");
 			delay(1);
 			printSolutionwTittle(checkerboard, "Steps", currentNode->box->content);
-			*/
-			//printf(".");
-			if (isNear(currentNode, *start))	// Esta cerca la cassilla de comienzo?
+				*/
+			// is near the start box?
+			if (isNear(currentNode, *start))
 			{
-				(*start)->box->content = currentNode->box->content+1;	// Asignar ultimo valor
-				return 1;	// Fin recursividad
+				// set value as last jump
+				(*start)->box->content = currentNode->box->content+1;
+				return 1;	// End Back-track
 			}
-		// No esta cerca la casilla de comienzo o no se han recorrido todas las casillas, buscar tro camino
-		return 0;
+		}
 	}
-	else	// Hay nodos a saltar
-		for (int i = 0; i < sizeSmallers; i++)	// Probar todas las disponibilidades
+	// if there are at least one index
+	else
+	{
+		// Goes trought whole jumpeable boxes with lowest next jumps
+		for (int i = 0; i < idxedSmallestSize; i++)
 		{
 			Node nextNode = NULL;
-			getNodeLinked(&nextNode, currentNode, *(idxSmallers+i));
-			nextNode->box->content = currentNode->box->content + 1;	// Asignacion del movimiento posterior
+			getNodeLinked(&nextNode, currentNode, *(idxedSmallest+i));
+			// set value to jump in it
+			nextNode->box->content = currentNode->box->content + 1;
+			nextNode->box->status = SELECTED;
 
-			if (movement(checkerboard, nextNode, start))	// Si es valido, se realizo un ciclo
-				return 1;	// Se comunica el resultado
+			// Do next jumps and if returns 1, backtracking is ended
+			if (movement(checkerboard, nextNode, start))
+				return 1;
+			// discard box, set default status and tries with next box
 			else
-				nextNode->box->content *= -1;	// Se cancela el movimiento realizado y se mantiene un registro de los ultimos movimientos pero no es la ruta actual
+			{
+				// change to negative value only for visibility
+				nextNode->box->content *= -1;
+				nextNode->box->status = NOSELECTED;
+			}
 		}
+	}
+	return 0;
+}
 
-	// llegado a este punto no se encontro el resultado
-	return 0;	// Se comunica el error
+/*
+  -1âŒª not selected
+  -2âŒª in reviewing
+*/
+int indexCandidates(Node currentNode, int** toIndexing)
+{
+	int *indexedCandidates = calloc(8, sizeof(int));
+	int idxSize = 0;
+
+	for (int i=0; i<8; i++)
+		*(indexedCandidates + i) = -1;
+	
+	for (int i = 0, smallest = 8; i < currentNode->sNodes; i++)
+	{
+		Node iNode = *(currentNode->nodes + i);
+
+		if (iNode->box->status == NOSELECTED) // Node no SELECTED and not set as CANDIDATE
+		{
+			int curNodeMovements = posibleMovements(*(currentNode->nodes + i), currentNode);
+			if (curNodeMovements < smallest) // New smaller movements
+			{
+				smallest = curNodeMovements;
+				for (int j = 0; j < idxSize; j++)
+					*(indexedCandidates + j) = -1;
+				idxSize = 1;
+				*indexedCandidates = i;
+			}
+			else if (curNodeMovements == smallest) // Another small movements
+			{
+				for (int j = 0; j < 8; j++)
+					if (*(indexedCandidates + j) == -1)
+					{
+						*(indexedCandidates + j) = i;
+						break;
+					}
+				idxSize++;
+			}
+			//else // bigger movements
+			 //for(int j=1; j<8; j++)
+			  //if(*(indexedCandidates+j)==-1)
+		}
+	}
+
+	*toIndexing = indexedCandidates;
+	return idxSize;
 }
